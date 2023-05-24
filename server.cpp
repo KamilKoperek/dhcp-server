@@ -38,6 +38,14 @@ class option {
 	}
 };
 
+string findOption(vector <option> options, char type) {
+	for(int i = 0; i < options.size(); i++) {
+		if(options[i].type == type)
+			return options[i].value;
+	}
+	return "";
+}
+
 class reservation {
 	public:
 	string mac;
@@ -243,7 +251,7 @@ string decodeDHCPmessage(char *buffer) {
 
 	int i = 240;
 
-
+	vector <option> recieved_options;
 	string messageType;
 	while(buffer[i] != '\xff') {
 		option current_option('\x0', "\x0");
@@ -253,10 +261,10 @@ string decodeDHCPmessage(char *buffer) {
 		for(int j = 0; j < l; j++)
 			current_option.value += buffer[i+j+1];
 		i += l+1;
-		if(current_option.type == '\x35')
-			messageType = current_option.value;
+		recieved_options.push_back(current_option);
 	}
-
+	messageType = findOption(recieved_options, '\x35');
+	
 	if(cookie == MAGIC_COOKIE) {
 		if(messageType == "\x1") { //DISCOVER
 			green("Otrzymano DISCOVER");
@@ -286,7 +294,16 @@ string decodeDHCPmessage(char *buffer) {
 
 		if(messageType == "\x3") { //REQUEST
 			green("Otrzymano REQUEST");
-			if(transaction_exists(xid).id != "-1") {
+			if(transaction_exists(xid).id == "-1") {
+				vector <option> options;
+				options.push_back(option('\x36', myHexIp));
+				options.push_back(option('\x33', nZeros(2) + "\x02\x58"));
+				options.push_back(option('\x1', hexIp(255,255,255,0)));
+				options.push_back(option('\x0f', DOMAIN));
+				broadcastMessage(encodeDHCPpack(xid, findOption(recieved_options, '\x32'), chaddr, options));
+				green("Wysłano DHCPpack, przypisano IP ");
+				hexIp2human(findOption(recieved_options, '\x32'));
+			} else {
 				vector <option> options;
 				options.push_back(option('\x36', myHexIp));
 				options.push_back(option('\x33', nZeros(2) + "\x02\x58"));
@@ -295,9 +312,9 @@ string decodeDHCPmessage(char *buffer) {
 				broadcastMessage(encodeDHCPpack(xid, transaction_exists(xid).ip, chaddr, options));
 				green("Wysłano DHCPpack, przypisano IP ");
 				hexIp2human(transaction_exists(xid).ip);
-				}
 			}
 		}
+	}
 	return xid;
 }
 int hexNum(char num) {
@@ -345,31 +362,37 @@ char octetToHex(string octet) {
 int main() {
 	fstream plik;
 	plik.open("rezerwacje.txt", ios_base::in);
-	char line[1024];
-	green("Wczytano rezerwacje: ");
-	while(plik.getline(line, 1024)) {
-		cout << line << "\n";
-		string mac = "";
-		for(int i = 0; i < 6; i++) {
-			string n = "";
-			n += line[i*2];
-			n += line[i*2+1];
-			mac += hex2int(n);
-		}
-		string ip = "";
-		string o = "";
-		int n = 0;
-		for(int i = 13; i < 32; i++) {
-			if(line[i] != '.' && line[i] != ' ' && line[i] != '\x0') {
-				o += line[i];
-			} else {
-				ip += octetToHex(o);
-				o = "";
-				n++;
+	if (!plik) {
+		plik.open("rezerwacje.txt",  ios_base::in | ios_base::out | ios_base::trunc);
+		plik <<"\n";
+		plik.close();
+	} else {
+		char line[1024];
+		green("Wczytano rezerwacje: ");
+		while(plik.getline(line, 1024)) {
+			cout << line << "\n";
+			string mac = "";
+			for(int i = 0; i < 6; i++) {
+				string n = "";
+				n += line[i*2];
+				n += line[i*2+1];
+				mac += hex2int(n);
 			}
-			if(n == 4) break;
+			string ip = "";
+			string o = "";
+			int n = 0;
+			for(int i = 13; i < 32; i++) {
+				if(line[i] != '.' && line[i] != ' ' && line[i] != '\x0') {
+					o += line[i];
+				} else {
+					ip += octetToHex(o);
+					o = "";
+					n++;
+				}
+				if(n == 4) break;
+			}
+			reservations.push_back(reservation(mac, ip));
 		}
-		reservations.push_back(reservation(mac, ip));
 	}
 	char broadcastIP[] = "255.255.255.255";
 	int broadcastPermission;
