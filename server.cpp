@@ -19,6 +19,17 @@
 #define MAGIC_COOKIE "\x63\x82\x53\x63"
 #define DOMAIN "domena123.com.pl"
 
+#define OPTION_NETMASK '\x1'
+#define OPTION_MESSAGE_TYPE '\x35'
+#define OPTION_DNS '\x6'
+#define OPTION_LEASE_TIME '\x33'
+#define OPTION_DHCP_IP '\x36'
+#define OPTION_DOMAIN_NAME '\x0f'
+
+#define MESSAGE_DISCOVER '\x1'
+#define MESSAGE_REQUEST '\x3'
+#define MESSAGE_RELEASE '\x7'
+
 using namespace std;
 string myHexIp = "\xc0\xa8\x1\xc8";
 
@@ -61,17 +72,38 @@ struct transaction {
 	string mac;
 	string ip;
 };
+string hexIp(int a, int b, int c, int d) {
+	string ip = "";
+	ip += (char)a;
+	ip += (char)b;
+	ip += (char)c;
+	ip += (char)d;
+	return ip;
+}
+
+
+class ipAddr {
+	public:
+		string hex;
+		void ip(string h) {
+			hex = h;
+		}
+		void ip(int a, int b, int c, int d) {
+			hex = hexIp(a,b,c,d);
+		}
+};
+
 
 vector <transaction> transactions;
 vector <reservation> reservations;
 //\033[0;42m \033[0m
 
 void red(string text) {
-	cout <<	"\033[41m" << text << "\033[0m\n";
+	cout << "\033[41m" << text << "\033[0m\n";
 }
 
 void green(string text) {
-	cout <<	"\033[42m" << text << "\033[0m\n";
+	cout << "\n\033[42m" << text << "\033[0m";
 }
 
 void hex_dump(string text) {
@@ -93,26 +125,18 @@ void hex_dump(string text) {
 }
 
 
-string hexIp(int a, int b, int c, int d) {
-	string ip = "";
-	ip += (char)a;
-	ip += (char)b;
-	ip += (char)c;
-	ip += (char)d;
-	return ip;
-}
 
 void hexIp2human(string ip) {
 	string hIp = "";
 	for(int i = 0; i < 4; i++)
 		cout << dec << (int)(unsigned char)ip[i] << ".";
-	cout << "\n";
+	//cout << "\n";
 }
 
 string nZeros(int n) {
 	string zeros = "";
 	for(int i = 0; i < n; i++)
-		zeros += '\n';
+		zeros += '\x0';
 	return zeros;
 }
 
@@ -124,7 +148,7 @@ bool macsEqual(string mac1, string mac2) {
 	return true;
 }
 
-string getFreeIp(string mac) {
+string getFreeIp(string mac = "") {
 	for(int i = 0; i < reservations.size(); i++) {
 		if(macsEqual(reservations[i].mac, mac))
 			return reservations[i].ip;	
@@ -189,7 +213,7 @@ string encodeDHCPoffer(string xid, string yiaddr, string mac, vector <option> op
 }
 
 
-string encodeDHCPpack(string xid, string yiaddr, string mac, vector <option> options) {
+string encodeDHCPack(string xid, string yiaddr, string mac, vector <option> options) {
 	options.push_back(option('\x35', "\x5"));
 	return encodeDHCPmessage(xid, nZeros(4), yiaddr, myHexIp, nZeros(4),  mac, options);
 }
@@ -252,7 +276,7 @@ string decodeDHCPmessage(char *buffer) {
 	int i = 240;
 
 	vector <option> recieved_options;
-	string messageType;
+	char messageType;
 	while(buffer[i] != '\xff') {
 		option current_option('\x0', "\x0");
 		current_option.type = buffer[i++];
@@ -263,80 +287,78 @@ string decodeDHCPmessage(char *buffer) {
 		i += l+1;
 		recieved_options.push_back(current_option);
 	}
-	messageType = findOption(recieved_options, '\x35');
+	messageType = findOption(recieved_options, '\x35')[0];
 	
 	if(cookie == MAGIC_COOKIE) {
-		if(messageType == "\x1") { //DISCOVER
-			green("Otrzymano DISCOVER");
-			if(transaction_exists(xid).id == "-1") {
-				transaction current_transaction;
-				current_transaction.id = xid;
-				current_transaction.mac = chaddr;
-				current_transaction.ip = getFreeIp(chaddr);
-				transactions.push_back(current_transaction);
-				cout << "\nZarejestrowano nową transakcje o xid:\n";
-				hex_dump(xid);
-				cout << "\nMAC:\n";
-				hex_dump(chaddr);
-				cout << "\nIP:\n";
-				hexIp2human(current_transaction.ip);
+		switch (messageType) {
+			case MESSAGE_DISCOVER:
+				green("Otrzymano DISCOVER od " + findOption(recieved_options, '\xc'));
+				if(transaction_exists(xid).id == "-1") {
+					transaction current_transaction;
+					current_transaction.id = xid;
+					current_transaction.mac = chaddr;
+					current_transaction.ip = getFreeIp(chaddr);
+					transactions.push_back(current_transaction);
+					cout << "\nZarejestrowano nową transakcje o xid:\n";
+					hex_dump(xid);
+					cout << "\nMAC:\n";
+					hex_dump(chaddr);
+					cout << "\nIP:\n";
+					hexIp2human(current_transaction.ip);
 
+					vector <option> options;
+					options.push_back(option(OPTION_DHCP_IP, myHexIp));
+					options.push_back(option(OPTION_DNS, hexIp(8,8,8,8)+hexIp(1,1,1,1)));
+					options.push_back(option(OPTION_LEASE_TIME, nZeros(2) + "\x02\x58"));
+					options.push_back(option(OPTION_NETMASK, hexIp(255,255,255,0)));
+					options.push_back(option(OPTION_DOMAIN_NAME, DOMAIN));
+					broadcastMessage(encodeDHCPoffer(xid, current_transaction.ip, chaddr, options));
+					green("Wysłano DHCPoffer");
+				} else {
+					red(" Ale transakcja już istnieje");
+					vector <option> options;
+					options.push_back(option(OPTION_DHCP_IP, myHexIp));
+					options.push_back(option(OPTION_DNS, hexIp(8,8,8,8)+hexIp(1,1,1,1)));
+					options.push_back(option(OPTION_LEASE_TIME, nZeros(2) + "\x02\x58"));
+					options.push_back(option(OPTION_NETMASK, hexIp(255,255,255,0)));
+					options.push_back(option(OPTION_DOMAIN_NAME, DOMAIN));
+					broadcastMessage(encodeDHCPoffer(xid, transaction_exists(xid).ip, chaddr, options));
+				}
+			break;
+			case MESSAGE_RELEASE:
+				green("Otrzymano RELEASE od " + findOption(recieved_options, '\xc'));
+			break;
+			case MESSAGE_REQUEST:
+				green("Otrzymano REQUEST od " + findOption(recieved_options, '\xc'));
+				string ip;
+				if(transaction_exists(xid).id == "-1")
+					ip = findOption(recieved_options, '\x32');			
+				else
+					ip =transaction_exists(xid).ip;
+				
 				vector <option> options;
-				options.push_back(option('\x36', myHexIp));
-				options.push_back(option('\x33', nZeros(2) + "\x02\x58"));
-				options.push_back(option('\x1', hexIp(255,255,255,0)));
-				options.push_back(option('\x0f', DOMAIN));
-				broadcastMessage(encodeDHCPoffer(xid, current_transaction.ip, chaddr, options));
-				green("Wysłano DHCPoffer");
-			} else
-				red(" Ale transakcja już istnieje");
+				options.push_back(option(OPTION_DHCP_IP, myHexIp));
+				options.push_back(option(OPTION_DNS, hexIp(8,8,8,8)+hexIp(1,1,1,1)));
+				options.push_back(option(OPTION_LEASE_TIME, nZeros(2) + "\x02\x58"));
+				options.push_back(option(OPTION_NETMASK, hexIp(255,255,255,0)));
+				options.push_back(option(OPTION_DOMAIN_NAME, DOMAIN));
+				if(ip[0] == '\x0')
+					ip = getFreeIp();
+				broadcastMessage(encodeDHCPack(xid, ip, chaddr, options));
+				green("Wysłano DHCack, przypisano IP ");
+				hexIp2human(ip);
+				cout << "\n";
+			break;
 		}
-
-		if(messageType == "\x3") { //REQUEST
-			green("Otrzymano REQUEST");
-			if(transaction_exists(xid).id == "-1") {
-				vector <option> options;
-				options.push_back(option('\x36', myHexIp));
-				options.push_back(option('\x33', nZeros(2) + "\x02\x58"));
-				options.push_back(option('\x1', hexIp(255,255,255,0)));
-				options.push_back(option('\x0f', DOMAIN));
-				broadcastMessage(encodeDHCPpack(xid, findOption(recieved_options, '\x32'), chaddr, options));
-				green("Wysłano DHCPpack, przypisano IP ");
-				hexIp2human(findOption(recieved_options, '\x32'));
-			} else {
-				vector <option> options;
-				options.push_back(option('\x36', myHexIp));
-				options.push_back(option('\x33', nZeros(2) + "\x02\x58"));
-				options.push_back(option('\x1', hexIp(255,255,255,0)));
-				options.push_back(option('\x0f', DOMAIN));
-				broadcastMessage(encodeDHCPpack(xid, transaction_exists(xid).ip, chaddr, options));
-				green("Wysłano DHCPpack, przypisano IP ");
-				hexIp2human(transaction_exists(xid).ip);
-			}
-		}
+		
 	}
 	return xid;
 }
 int hexNum(char num) {
-	switch(num) {
-		case '0': return 0;
-		case '1': return 1;
-		case '2': return 2;
-		case '3': return 3;
-		case '4': return 4;
-		case '5': return 5;
-		case '6': return 6;
-		case '7': return 7;
-		case '8': return 8;
-		case '9': return 9;
-		case 'A': return 10;
-		case 'B': return 11;
-		case 'C': return 12;
-		case 'D': return 13;
-		case 'E': return 14;
-		case 'F': return 15;
-	}
-	return -1;
+	if(num >= 48 && num < 58)
+		return num - 48;
+	else
+		return num - 55;
 }
 
 int hex2int(string hex) {
@@ -359,7 +381,36 @@ char octetToHex(string octet) {
 	return r;
 }
 
+struct range {
+	
+};
+
+
+
 int main() {
+	fstream config_file;
+	config_file.open("config.txt", ios_base::in);
+	if(config_file) {
+		char line[1024];
+		while(config_file.getline(line, 1024)) {
+			if(line[0] == '#' || line[0] == '\x0' || line[0] == ' ')
+				continue;
+			int i;
+			string param = "";
+			string value = "";
+			for(i = 0; i < 1024; i++) {
+				if(line[i] == '=')
+					break;
+				param += line[i];
+			}
+			for(i++; i < 1024; i++) {
+				if(line[i] == '\x0')
+					break;
+				value += line[i];
+			}
+			cout << "Opcja: " << param << "\twartość: " << value << "\n";
+		}
+	}
 	fstream plik;
 	plik.open("rezerwacje.txt", ios_base::in);
 	if (!plik) {
