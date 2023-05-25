@@ -15,7 +15,7 @@
 #include <netinet/udp.h>
 #include <netinet/ip.h>
 #include <fstream>
-
+ 
 #define MAGIC_COOKIE "\x63\x82\x53\x63"
 #define DOMAIN "domena123.com.pl"
 
