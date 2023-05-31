@@ -1,8 +1,12 @@
-#globalne: 
+# globalne: 
 interface=enp0s3
+routers=255.255.255.255
 mask=255.255.255.0
+mask=/24
+time=3600s
+routers=192.168.1.254,16.16.16.16
 
-#zakresy:
+# zakresy:
 range=192.168.1.100-192.168.1.145
 mask=/24
 dns=8.8.8.8,8.8.4.4
@@ -11,9 +15,8 @@ time=1h30m
 
 range=192.168.1.170-192.168.1.200
 dns=1.1.1.1
-time=3600s
 
-#rezerwacja:
+# rezerwacja:
 host=080027B935CC
-option.ip=192.168.1.150
-option.time=8h
+ip=192.168.1.150
+time=8h
