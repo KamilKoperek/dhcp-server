@@ -87,13 +87,26 @@ class optionsList {
 		vector <ipAddr> dns;
 		
 };
-
+string encodeMAC(string m) {
+	string clean, mac;
+	for(int i = 0; i < m.size(); i++) {
+		if(m[i] != '-' && m[i] != ':')
+			clean += m[i];
+	}
+	for(int i = 0; i < 4; i++) {
+		string n;
+		n += m[i*2];
+		n += m[i*2+1];
+		mac += hex2int(m[i*2] + m[i*2+1]);
+	}
+	return mac;
+}
 class reservation {
 	public:
 	string mac;
 	ipAddr ip;
 	reservation(string m = "") {
-		mac = m;
+		mac = encodeMAC(m);
 	}
 	optionsList options;
 	

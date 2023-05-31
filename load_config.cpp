@@ -22,9 +22,9 @@ fstream config_file;
 				reservation newReservation(value);
 				reservations.push_back(newReservation);
 			}
-			if(param == "interface") {
+			if(param == "interface")
 				interface = value;
-			}
+
 			optionsList* selectedOption;
 			switch(configScope) {
 				case CONFIG_SCOPE_GLOBAL:
@@ -37,22 +37,24 @@ fstream config_file;
 				
 				case CONFIG_SCOPE_HOST:
 					selectedOption = &(reservations[reservations.size()-1].options);
+					if(param == "ip")
+						eservations[reservations.size()-1].ip.hex = encodeIp(value);
+						
 				break;
 			}
 			
-			
-					if(param == "routers") {
-						vector <ipAddr> routers = splitAddresses(value);
-						selectedOption->routers.insert(selectedOption->routers.begin() , routers.begin(), routers.end());
-					}
-					else if(param == "dns") {
-						vector <ipAddr> dns = splitAddresses(value);
-						selectedOption->dns.insert(selectedOption->dns.begin() , dns.begin(), dns.end());
-					}
-					else if(param == "time")
-						selectedOption->time = encodeTime(value);
-					else if(param == "mask")
-						selectedOption->mask = encodeMask(value);
+			if(param == "routers") {
+				vector <ipAddr> routers = splitAddresses(value);
+				selectedOption->routers.insert(selectedOption->routers.begin() , routers.begin(), routers.end());
+			}
+			else if(param == "dns") {
+				vector <ipAddr> dns = splitAddresses(value);
+				selectedOption->dns.insert(selectedOption->dns.begin() , dns.begin(), dns.end());
+			}
+			else if(param == "time")
+				selectedOption->time = encodeTime(value);
+			else if(param == "mask")
+				selectedOption->mask = encodeMask(value);
 
 				
 		}
