@@ -36,16 +36,20 @@ string myHexIp = "\xc0\xa8\x1\xc8";
 int sendSocket;
 int lastIp = 100;
 sockaddr_in broadcastAddr;
+string hexIp(int a, int b, int c, int d);
+class ipAddr {
+	public:
+		string hex;
+		ipAddr(string h = "") {
+			hex = h;
+		}
+		ipAddr(int a, int b, int c, int d) {
+			hex = hexIp(a,b,c,d);
+		}
+};
 
-string hexIp(int a, int b, int c, int d) {
-	string ip = "";
-	ip += (char)a;
-	ip += (char)b;
-	ip += (char)c;
-	ip += (char)d;
-	return ip;
-}
 
+#include "converters.cpp"
 class option {
 	public:
 	char type;
@@ -66,17 +70,6 @@ string findOption(vector <option> options, char type) {
 	return "";
 }
 
-class ipAddr {
-	public:
-		string hex;
-		ipAddr(string h = "") {
-			hex = h;
-		}
-		ipAddr(int a, int b, int c, int d) {
-			hex = hexIp(a,b,c,d);
-		}
-};
-
 
 
 class optionsList {
@@ -87,20 +80,7 @@ class optionsList {
 		vector <ipAddr> dns;
 		
 };
-string encodeMAC(string m) {
-	string clean, mac;
-	for(int i = 0; i < m.size(); i++) {
-		if(m[i] != '-' && m[i] != ':')
-			clean += m[i];
-	}
-	for(int i = 0; i < 4; i++) {
-		string n;
-		n += m[i*2];
-		n += m[i*2+1];
-		mac += hex2int(m[i*2] + m[i*2+1]);
-	}
-	return mac;
-}
+
 class reservation {
 	public:
 	string mac;
@@ -111,44 +91,7 @@ class reservation {
 	optionsList options;
 	
 };
-char octetToHex(string octet) {
-	int r = 0;
-	int n = 1;
-	for(int i = octet.size() - 1; i >= 0; i--) {
-		r += ((int)octet[i]-48)*n;
-		n *= 10;
-	}
-	return r;
-}
-vector <string> splitByChar(string s, char c) {
-	vector <string> strings;
-	strings.push_back("");
-	for(int i = 0; i < s.size(); i++) {
-		if(s[i] == c) {
-			strings.push_back("");
-			i++;
-		}
-		strings[strings.size()-1] += s[i];
-	}
-	return strings;
-}
-ipAddr encodeIp(string IP) {
-	ipAddr r;
-	string o = "";
-	int n = 0;
-	for(int i = 0; i < IP.size(); i++) {
-		if(IP[i] != '.') {
-			o += IP[i];
-		} else {
-			r.hex += octetToHex(o);
-			o = "";
-			n++;
-		}
-		if(n == 4) break;
-	}
-	r.hex += octetToHex(o);
-	return r;
-}
+c
 class range {
 	public:
 		ipAddr beginIp;
@@ -205,12 +148,7 @@ void hex_dump(string text) {
 
 
 
-void hexIp2human(string ip) {
-	string hIp = "";
-	for(int i = 0; i < 4; i++)
-		cout << dec << (int)(unsigned char)ip[i] << ".";
-	//cout << "\n";
-}
+
 
 string nZeros(int n) {
 	string zeros = "";
@@ -433,33 +371,9 @@ string decodeDHCPmessage(char *buffer) {
 	}
 	return xid;
 }
-int hexNum(char num) {
-	if(num >= 48 && num < 58)
-		return num - 48;
-	else
-		return num - 55;
-}
-int hex2int(string hex) {
-	int r = 0;
-	int n = 1;
-	for(int i = hex.size() - 1; i >= 0; i--) {
-		r += hexNum(hex[i]) * n;
-		n *= 16;
-	}
-	return r;
-}
 
 
 
-int string2int (string s) {
-	int n = 0;
-	int m = 1;
-	for(int i = s.size()-1; i >= 0; i--) {
-		n += ((int)s[i]-48)*m;
-		m *= 10;
-	}
-	return n;
-}
 
 ipAddr encodeMask(string mask) {
 	if(mask[0] == '/') {
