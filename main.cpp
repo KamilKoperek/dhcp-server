@@ -33,23 +33,33 @@
 using namespace std;
 string myHexIp = "\xc0\xa8\x1\xc8";
 
+
 int sendSocket;
 int lastIp = 100;
 sockaddr_in broadcastAddr;
 string hexIp(int a, int b, int c, int d);
+
+
+string hexIp2human(string);
+
 class ipAddr {
 	public:
-		string hex;
+		string hex, human;
+		bool unset = false;
 		ipAddr(string h = "") {
+			if(h == "unset")
+				unset = true;
 			hex = h;
+			human = hexIp2human(hex);
 		}
 		ipAddr(int a, int b, int c, int d) {
 			hex = hexIp(a,b,c,d);
+			human = hexIp2human(hex);
 		}
 };
-
-
 #include "converters.cpp"
+
+
 class option {
 	public:
 	char type;
@@ -74,13 +84,13 @@ string findOption(vector <option> options, char type) {
 
 class optionsList {
 	public:
-		ipAddr mask;
-		int time;
+		ipAddr mask = ipAddr("unset");
+		int time = -1;
 		vector <ipAddr> routers;
 		vector <ipAddr> dns;
-		
+		string domain = "";	
 };
-
+optionsList globalOptions;
 class reservation {
 	public:
 	string mac;
@@ -89,9 +99,8 @@ class reservation {
 		mac = encodeMAC(m);
 	}
 	optionsList options;
-	
 };
-c
+
 class range {
 	public:
 		ipAddr beginIp;
@@ -111,7 +120,18 @@ struct transaction {
 };
 
 
-
+void fillOptionList(optionsList* opt) {
+	if(opt->mask.unset)
+		opt->mask = globalOptions.mask;
+	if(opt->time == -1)
+		opt->time = globalOptions.time;
+	if(opt->domain == "")
+		opt->domain = globalOptions.domain;
+	if(opt->routers.size() == 0)
+		opt->routers = globalOptions.routers;
+	if(opt->dns.size() == 0)
+		opt->dns = globalOptions.dns;
+}
 
 
 
@@ -127,6 +147,59 @@ void red(string text) {
 void green(string text) {
 	cout << "\n\033[42m" << text << "\033[0m";
 }
+
+
+void info(string text, ...) {
+	bool inverse = false;
+	bool underline = false;
+	bool bold = false;
+	int color = 3;
+	va_list arg;
+	va_start(arg, text);
+
+	for(int i = 0; i < text.size(); i++) {
+		if(text[i] == '%') {
+			switch (text[i+1]) {
+				case 's': cout << va_arg(arg, string); break;
+				case 'c': cout << va_arg(arg, char*); break;
+				case 'i': cout << va_arg(arg, int); break;
+			}
+			i++;
+			continue;    		
+		} else if(text[i] == '#') {
+			cout << "\033[0m";
+			switch(text[i+1]) {
+				case 'r': color = 0; break;
+				case 'g': color = 1; break;
+				case 'y': color = 2; break;
+				case 'w': color = 3; break;
+				case 'i': inverse = !inverse; break;
+				case 'u': underline = !underline; break;
+				case 'b': bold = !bold; break;
+			}
+			if(inverse)
+				cout << "\033[7m";
+			if(underline)
+				cout << "\033[4m";
+			if(bold)
+				cout << "\033[1m";
+			switch(color) {
+				case 0: cout << "\033[31m"; break;
+				case 1: cout << "\033[32m"; break;
+				case 2: cout << "\033[33m"; break;
+				case 3: cout << "\033[37m"; break;
+			}
+			
+			i++;
+			continue;  
+		} else			
+			cout << text[i];
+	}
+	cout << "\033[0m";
+	va_end(arg);
+}
+
+
 
 void hex_dump(string text) {
 	for(int i = 0; i < text.size(); i++)
@@ -184,193 +257,7 @@ transaction transaction_exists(string id) {
 }
 
 
-
-
-string encodeDHCPmessage(string xid, string ciaddr, string yiaddr, string siaddr, string giaddr, string chaddr, vector <option> options) {
-	string message = "";
-	message += '\x2'; //op
-	message += '\x1'; //htype
-	message += '\x6'; //hlen
-	message += '\x0'; //hops
-
-	message += xid;
-
-	message += nZeros(2); //secs
-	message += nZeros(2); //flags
-
-	message += ciaddr;
-	message += yiaddr;
-	message += siaddr;
-	message += giaddr;
-
-	message += chaddr;
-
-	message += nZeros(64); //sname
-
-	message += nZeros(128); //file
-
-	//options:
-
-	message += MAGIC_COOKIE;
-
-	for(int i = 0; i < options.size(); i++) {
-		message += options[i].type;
-		message += options[i].value.size();
-		message += options[i].value;
-	}
-
-	message += '\xff';
-	//message += nZeros(31);
-	return message;
-}
-
-string encodeDHCPoffer(string xid, string yiaddr, string mac, vector <option> options) {
-	options.push_back(option('\x35', "\x2"));
-	return encodeDHCPmessage(xid, nZeros(4), yiaddr, myHexIp, nZeros(4), mac, options);
-}
-
-
-string encodeDHCPack(string xid, string yiaddr, string mac, vector <option> options) {
-	options.push_back(option('\x35', "\x5"));
-	return encodeDHCPmessage(xid, nZeros(4), yiaddr, myHexIp, nZeros(4),  mac, options);
-}
-
-void broadcastMessage(string text) {
-	sendto(sendSocket, text.data(), text.size(), 0, (struct sockaddr *) &broadcastAddr, sizeof(broadcastAddr));
-}
-
-
-string decodeDHCPmessage(char *buffer) {
-	char op = buffer[0];
-	char htype = buffer[1];
-	char hlen = buffer[2];
-	char hops = buffer[3];
-
-	string xid = "";
-	for(int i = 4; i < 8; i++)
-		xid+=buffer[i];
-
-	string secs = "";
-	for(int i = 8; i < 10; i++)
-		secs+=buffer[i];
-
-	string flags = "";
-	for(int i = 10; i < 12; i++)
-		flags+=buffer[i];
-
-	string ciaddr = "";
-	for(int i = 12; i < 16; i++)
-		ciaddr+=buffer[i];
-
-	string yiaddr = "";
-	for(int i = 16; i < 20; i++)
-		yiaddr+=buffer[i];
-
-	string siaddr = "";
-	for(int i = 20; i < 24; i++)
-		siaddr+=buffer[i];
-
-	string giaddr = "";
-	for(int i = 24; i < 28; i++)
-		giaddr+=buffer[i];
-
-	string chaddr = "";
-	for(int i = 28; i < 44; i++)
-		chaddr+=buffer[i];
-
-	string sname = "";
-	for(int i = 44; i < 108; i++)
-		sname+=buffer[i];
-
-	string file = "";
-	for(int i = 108; i < 236; i++)
-		file+=buffer[i];
-
-	string cookie = "";
-	for(int i = 236; i < 240; i++)
-		cookie+=buffer[i];
-
-	int i = 240;
-
-	vector <option> recieved_options;
-	char messageType;
-	while(buffer[i] != '\xff') {
-		option current_option('\x0', "\x0");
-		current_option.type = buffer[i++];
-		int l = (int)buffer[i];
-		current_option.value = "";
-		for(int j = 0; j < l; j++)
-			current_option.value += buffer[i+j+1];
-		i += l+1;
-		recieved_options.push_back(current_option);
-	}
-	messageType = findOption(recieved_options, '\x35')[0];
-	
-	if(cookie == MAGIC_COOKIE) {
-		switch (messageType) {
-			case MESSAGE_DISCOVER:
-				green("Otrzymano DISCOVER od " + findOption(recieved_options, '\xc'));
-				if(transaction_exists(xid).id == "-1") {
-					transaction current_transaction;
-					current_transaction.id = xid;
-					current_transaction.mac = chaddr;
-					current_transaction.ip = getFreeIp(chaddr);
-					transactions.push_back(current_transaction);
-					cout << "\nZarejestrowano nową transakcje o xid:\n";
-					hex_dump(xid);
-					cout << "\nMAC:\n";
-					hex_dump(chaddr);
-					cout << "\nIP:\n";
-					hexIp2human(current_transaction.ip);
-
-					vector <option> options;
-					options.push_back(option(OPTION_DHCP_IP, myHexIp));
-					options.push_back(option(OPTION_DNS, hexIp(8,8,8,8)+hexIp(1,1,1,1)));
-					options.push_back(option(OPTION_LEASE_TIME, nZeros(2) + "\x02\x58"));
-					options.push_back(option(OPTION_NETMASK, hexIp(255,255,255,0)));
-					options.push_back(option(OPTION_DOMAIN_NAME, DOMAIN));
-					broadcastMessage(encodeDHCPoffer(xid, current_transaction.ip, chaddr, options));
-					green("Wysłano DHCPoffer");
-				} else {
-					red(" Ale transakcja już istnieje");
-					vector <option> options;
-					options.push_back(option(OPTION_DHCP_IP, myHexIp));
-					options.push_back(option(OPTION_DNS, hexIp(8,8,8,8)+hexIp(1,1,1,1)));
-					options.push_back(option(OPTION_LEASE_TIME, nZeros(2) + "\x02\x58"));
-					options.push_back(option(OPTION_NETMASK, hexIp(255,255,255,0)));
-					options.push_back(option(OPTION_DOMAIN_NAME, DOMAIN));
-					broadcastMessage(encodeDHCPoffer(xid, transaction_exists(xid).ip, chaddr, options));
-				}
-			break;
-			case MESSAGE_RELEASE:
-				green("Otrzymano RELEASE od " + findOption(recieved_options, '\xc'));
-			break;
-			case MESSAGE_REQUEST:
-				green("Otrzymano REQUEST od " + findOption(recieved_options, '\xc'));
-				string ip;
-				if(transaction_exists(xid).id == "-1")
-					ip = findOption(recieved_options, '\x32');			
-				else
-					ip =transaction_exists(xid).ip;
-				
-				vector <option> options;
-				options.push_back(option(OPTION_DHCP_IP, myHexIp));
-				options.push_back(option(OPTION_DNS, hexIp(8,8,8,8)+hexIp(1,1,1,1)));
-				options.push_back(option(OPTION_LEASE_TIME, nZeros(2) + "\x02\x58"));
-				options.push_back(option(OPTION_NETMASK, hexIp(255,255,255,0)));
-				options.push_back(option(OPTION_DOMAIN_NAME, DOMAIN));
-				if(ip[0] == '\x0')
-					ip = getFreeIp();
-				broadcastMessage(encodeDHCPack(xid, ip, chaddr, options));
-				green("Wysłano DHCack, przypisano IP ");
-				hexIp2human(ip);
-				cout << "\n";
-			break;
-		}
-		
-	}
-	return xid;
-}
+#include "dhcp_messages.cpp"
 
 
 
@@ -439,55 +326,25 @@ enum configScopes {
 string interface;
 
 int main() {
-
-	//hex_dump(encodeIp("16.17.255.16"));
-
-	optionsList globalOptions;
+	
 	#include "load_config.cpp"
-	/*fstream plik;
-	plik.open("rezerwacje.txt", ios_base::in);
-	if (!plik) {
-		plik.open("rezerwacje.txt",  ios_base::in | ios_base::out | ios_base::trunc);
-		plik <<"\n";
-		plik.close();
-	} else {
-		char line[1024];
-		green("Wczytano rezerwacje: ");
-		while(plik.getline(line, 1024)) {
-			cout << line << "\n";
-			string mac = "";
-			for(int i = 0; i < 6; i++) {
-				string n = "";
-				n += line[i*2];
-				n += line[i*2+1];
-				mac += hex2int(n);
-			}
-			string ip = "";
-			string o = "";
-			int n = 0;
-			for(int i = 13; i < 32; i++) {
-				if(line[i] != '.' && line[i] != ' ' && line[i] != '\x0') {
-					o += line[i];
-				} else {
-					ip += octetToHex(o);
-					o = "";
-					n++;
-				}
-				if(n == 4) break;
-			}
-			reservations.push_back(reservation(mac, ip));
-		}
-	}*/
+	
+	info("\n+---Inicjalizacja socketu:\n");
+	
 	char broadcastIP[] = "255.255.255.255";
 	int broadcastPermission;
 	unsigned int sendStringLen;
 	if ((sendSocket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
-		red("socket() failed");
+		info("#r|     socket() failed\n");
+	else
+		info("|     socket()\n");
 
 	setsockopt(sendSocket, SOL_SOCKET, SO_BINDTODEVICE, interface.data(), interface.size());
 	broadcastPermission = 1;
 	if (setsockopt(sendSocket, SOL_SOCKET, SO_BROADCAST, (void *) &broadcastPermission, sizeof(broadcastPermission)) < 0)
-		red("setsockopt() failed");
+		info("#r|     setsockopt() failed\n");
+	else
+		info("|     setsockopt()\n");
 
 	memset(&broadcastAddr, 0, sizeof(broadcastAddr));
 	broadcastAddr.sin_family = AF_INET;
@@ -498,26 +355,29 @@ int main() {
 	char buffer[1024];
 	sockaddr_in servaddr;
 	if ( (recvSocket = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
-		perror("socket creation failed");
+		info("#r|     socket creation failed\n");
 		exit(EXIT_FAILURE);
-	}
+	} else
+		info("|     Utworzono socket\n");
 	memset(&servaddr, 0, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = INADDR_ANY;
 	servaddr.sin_port = htons(67);
 	if ( bind(recvSocket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0 ) {
-		perror("bind failed");
+		info("#r|     bind failed\n");
 		exit(EXIT_FAILURE);
-	}
+	} else
+		info("|     Podłączono interfejs #b%s\n", interface);
 	socklen_t len;
   	int n;
 
 	len = sizeof(servaddr);
   	string xid;
+  	
+  	info("\n+---Uruchamiono serwer DHCP:\n");
   	while (1) {
 	  	n = recvfrom(recvSocket, (char*)buffer, 1024, MSG_WAITALL, ( struct sockaddr *) &servaddr, &len);
 		buffer[n] = '\0';
-		//cout << cliaddr.sin_addr.s_addr << "\n\n";
 		decodeDHCPmessage(buffer);
 	}
 	return 0;

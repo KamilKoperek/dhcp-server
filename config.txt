@@ -5,18 +5,24 @@ mask=255.255.255.0
 mask=/24
 time=3600s
 routers=192.168.1.254,16.16.16.16
-
+domain=www.domena.local
+dns=1.2.2.3
+dns=1.1.1.1
 # zakresy:
 range=192.168.1.100-192.168.1.145
 mask=/24
 dns=8.8.8.8,8.8.4.4
 routers=192.168.1.254
 time=1h30m
-
+rty345.
 range=192.168.1.170-192.168.1.200
 dns=1.1.1.1
-
+co= xd
 # rezerwacja:
 host=080027B935CC
 ip=192.168.1.150
 time=8h
+
+host=080027B935CA
+
+range=192.168.1.1-192.168.1.10

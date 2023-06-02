@@ -6,12 +6,14 @@ string hexIp(int a, int b, int c, int d) {
 	ip += (char)d;
 	return ip;
 }
+
 int hexNum(char num) {
 	if(num >= 48 && num < 58)
 		return num - 48;
 	else
 		return num - 55;
 }
+
 int hex2int(string hex) {
 	int r = 0;
 	int n = 1;
@@ -21,13 +23,14 @@ int hex2int(string hex) {
 	}
 	return r;
 }
+
 string encodeMAC(string m) {
 	string clean, mac;
 	for(int i = 0; i < m.size(); i++) {
 		if(m[i] != '-' && m[i] != ':')
 			clean += m[i];
 	}
-	for(int i = 0; i < 4; i++) {
+	for(int i = 0; i < 6; i++) {
 		string n;
 		n += m[i*2];
 		n += m[i*2+1];
@@ -35,6 +38,7 @@ string encodeMAC(string m) {
 	}
 	return mac;
 }
+
 char octetToHex(string octet) {
 	int r = 0;
 	int n = 1;
@@ -44,6 +48,7 @@ char octetToHex(string octet) {
 	}
 	return r;
 }
+
 vector <string> splitByChar(string s, char c) {
 	vector <string> strings;
 	strings.push_back("");
@@ -56,27 +61,39 @@ vector <string> splitByChar(string s, char c) {
 	}
 	return strings;
 }
+
 ipAddr encodeIp(string IP) {
-	ipAddr r;
+	string hex;
 	string o = "";
 	int n = 0;
 	for(int i = 0; i < IP.size(); i++) {
 		if(IP[i] != '.') {
 			o += IP[i];
 		} else {
-			r.hex += octetToHex(o);
+			hex += octetToHex(o);
 			o = "";
 			n++;
 		}
 		if(n == 4) break;
 	}
-	r.hex += octetToHex(o);
-	return r;
+	hex += octetToHex(o);
+	return ipAddr(hex);
 }
-void hexIp2human(string ip) {
+
+string hexIp2human(string ip) {
 	string hIp = "";
+	stringstream a;
 	for(int i = 0; i < 4; i++)
-		cout << dec << (int)(unsigned char)ip[i] << ".";
+		a << dec << (int)(unsigned char)ip[i] << (i == 3 ? "" : ".");
+	return a.str();
+}
+
+string hexMac2human(string mac) {
+	string hMac = "";
+	stringstream a;
+	for(int i = 0; i < 6; i++)
+		a << hex << (int)(unsigned char)mac[i] << (i == 5 ? "" : ":");
+	return a.str();
 }
 int string2int (string s) {
 	int n = 0;
