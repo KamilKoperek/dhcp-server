@@ -1,5 +1,5 @@
 # dhcp-server
-*This project is not ended, and not everything works as it should.*
+*This project is not finished, and not everything works as it should.*
 
 Simple DHCPv4 server written in C++.
 All setting are stored in one configuration file with pairs `param=value`.
